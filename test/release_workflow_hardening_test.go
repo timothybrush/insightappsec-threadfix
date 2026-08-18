@@ -16,9 +16,12 @@ package test
 //      for its changelog (checkout v4 defaults to a shallow depth-1 clone).
 //
 // It FAILS against the pre-fix workflow (goreleaser-action@master, floating @v1
-// actions, no permissions block, no fetch-depth) and PASSES against the fix.
-// It has ongoing value as a CI guard: it goes red if the workflow is ever
-// un-pinned again.
+// actions, no permissions block, no fetch-depth) and PASSES against the fix, so
+// it goes red if the workflow is ever un-pinned again.
+//
+// NOTE: this repo currently has no CI workflow that runs `go test`, so the guard
+// only fires when someone runs the suite locally. Add a push/pull_request test
+// workflow to enforce it automatically.
 //
 // No network, no credentials, no running service required — unlike the
 // integration test in this package.
@@ -46,6 +49,10 @@ type workflow struct {
 }
 
 var shaPin = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// An exact goreleaser version pin: v0.184.0 / 0.184.0. Anything else (latest,
+// nightly, ~> v0, >= 1.0, 1.x, a bare int) is a floating/mutable ref and fails.
+var exactVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
 
 func loadReleaseWorkflow(t *testing.T) workflow {
 	t.Helper()
@@ -118,9 +125,15 @@ func TestGoreleaserBinaryPinnedToExactVersion(t *testing.T) {
 		if !ok {
 			t.Fatalf("goreleaser step has no `version` input — binary would default to ~> v2 and reject this repo's v0-era .goreleaser.yml")
 		}
-		vs := strings.TrimSpace(v.(string))
-		if strings.ContainsAny(vs, "~^*") || strings.Contains(vs, "> v") || strings.Contains(vs, ">v") {
-			t.Errorf("goreleaser binary version %q is a floating range, not an immutable pin (CWE-829); use an exact version like v0.184.0", vs)
+		vs, isStr := v.(string)
+		if !isStr {
+			t.Fatalf("goreleaser `version` is not a string (%T: %v) — expected an exact pin like v0.184.0", v, v)
+		}
+		vs = strings.TrimSpace(vs)
+		// Positive allowlist: only an exact X.Y.Z pin passes. A denylist of range
+		// operators would let latest/nightly/1.x slip through as "pinned".
+		if !exactVersion.MatchString(vs) {
+			t.Errorf("goreleaser binary version %q is not an immutable exact pin (CWE-829); use e.g. v0.184.0", vs)
 		}
 	}
 	if !found {
@@ -136,6 +149,13 @@ func TestReleaseHasLeastPrivilegePermissions(t *testing.T) {
 	}
 	if wf.Permissions["contents"] != "write" {
 		t.Errorf("expected permissions.contents=write (goreleaser creates the Release), got %q", wf.Permissions["contents"])
+	}
+	// Least-privilege means ONLY the scope goreleaser needs — reject any extra
+	// grant (packages/id-token/actions/...) so the test enforces its own name.
+	for scope, level := range wf.Permissions {
+		if scope != "contents" {
+			t.Errorf("unexpected permission scope %q=%q — release only needs contents:write (least privilege)", scope, level)
+		}
 	}
 }
 
