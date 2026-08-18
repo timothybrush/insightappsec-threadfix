@@ -24,6 +24,12 @@ jobs:
       - name: Check out code into the Go module directory
         # Pinned to a commit SHA (actions/checkout v4.4.0) instead of a floating tag.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # Full history + tags: goreleaser's changelog needs the prior tag to
+          # compute the log range. checkout v4 defaults to a shallow depth-1
+          # clone with no tags (v1 fetched full history), which would silently
+          # produce an empty changelog on release.
+          fetch-depth: 0
 
       - name: Release via goreleaser
         # CWE-829: pin the third-party action to a commit SHA (goreleaser-action v7.2.3)
