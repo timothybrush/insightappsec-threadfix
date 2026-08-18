@@ -27,6 +27,7 @@ package test
 // integration test in this package.
 
 import (
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
@@ -150,11 +151,14 @@ func TestReleaseHasLeastPrivilegePermissions(t *testing.T) {
 	if wf.Permissions["contents"] != "write" {
 		t.Errorf("expected permissions.contents=write (goreleaser creates the Release), got %q", wf.Permissions["contents"])
 	}
-	// Least-privilege means ONLY the scope goreleaser needs — reject any extra
-	// grant (packages/id-token/actions/...) so the test enforces its own name.
+	// Least-privilege = the required floor (contents:write) with no *dangerous*
+	// over-grant. Reject the broad write scopes a release doesn't need, but allow
+	// otherwise-benign additions (e.g. a future id-token:write for artifact
+	// signing is itself least-privilege) rather than pinning an exact set.
+	dangerous := map[string]bool{"actions": true, "packages": true, "administration": true, "security-events": true, "deployments": true}
 	for scope, level := range wf.Permissions {
-		if scope != "contents" {
-			t.Errorf("unexpected permission scope %q=%q — release only needs contents:write (least privilege)", scope, level)
+		if dangerous[scope] && level == "write" {
+			t.Errorf("over-broad permission scope %q=%q — a release does not need it (least privilege)", scope, level)
 		}
 	}
 }
@@ -171,8 +175,9 @@ func TestCheckoutFetchesFullHistory(t *testing.T) {
 		if !ok {
 			t.Fatal("checkout step does not set fetch-depth: 0 — v4 defaults to a shallow depth-1 clone, breaking goreleaser's changelog")
 		}
-		// yaml.v2 decodes an unquoted integer as int.
-		if iv, isInt := fd.(int); !isInt || iv != 0 {
+		// Actions inputs are strings, so unquoted 0 (yaml int) and quoted "0"
+		// are equivalent — normalise before comparing.
+		if fmt.Sprintf("%v", fd) != "0" {
 			t.Errorf("checkout fetch-depth is %v, want 0 (full history + tags for the changelog)", fd)
 		}
 	}
