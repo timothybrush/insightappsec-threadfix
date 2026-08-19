@@ -3,23 +3,39 @@ on:
   push:
     tags:
       - "v*.*.*"
+
+# Least-privilege token: goreleaser only needs to create the GitHub Release.
+# (Mythos #193858 / IAS-12602, CWE-829 — was relying on the broad default scope.)
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     name: goreleaser
     steps:
       - name: Set up Go 1.13
-        uses: actions/setup-go@v1
+        # Pinned to a commit SHA (actions/setup-go v5.6.0) instead of a floating tag.
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version: 1.13
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
+        # Pinned to a commit SHA (actions/checkout v4.4.0) instead of a floating tag.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # goreleaser's changelog needs the prior tag; checkout v4 defaults to a
+          # shallow depth-1 clone (no tags), which silently empties it.
+          fetch-depth: 0
 
       - name: Release via goreleaser
-        uses: goreleaser/goreleaser-action@master
+        # CWE-829: SHA-pin the action (was mutable @master). The `version` input
+        # separately pins the goreleaser binary to v0.184.0 — the last v0.x, which
+        # this repo's v0-era .goreleaser.yml needs (v1/v2 reject its keys).
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94
         with:
+          version: v0.184.0
           args: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
