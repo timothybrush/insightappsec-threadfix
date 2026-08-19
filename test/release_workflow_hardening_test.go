@@ -1,30 +1,11 @@
 package test
 
-// Discriminating guard for Mythos #193858 / IAS-12602 (CWE-829).
+// Guards the supply-chain hardening of .github/workflows/release.yml so a future
+// edit can't silently un-pin it (Mythos #193858 / IAS-12602, CWE-829). Each test
+// below states the one invariant it enforces; rationale is in PR #11.
 //
-// The release workflow builds and publishes the customer CLI binaries (which
-// hold InsightAppSec + ThreadFix API keys on-host), so its supply-chain
-// integrity matters. This test parses .github/workflows/release.yml and asserts
-// the hardening invariants the fix established:
-//
-//   1. Every third-party action is pinned to a 40-hex commit SHA, never a
-//      mutable tag/branch (@master, @v1, ...).
-//   2. The goreleaser BINARY is pinned to an exact version (not a floating
-//      "~> vN" range) so the built artifact is reproducible.
-//   3. A least-privilege top-level `permissions:` block is present.
-//   4. The checkout step sets fetch-depth: 0 so goreleaser has full tag history
-//      for its changelog (checkout v4 defaults to a shallow depth-1 clone).
-//
-// It FAILS against the pre-fix workflow (goreleaser-action@master, floating @v1
-// actions, no permissions block, no fetch-depth) and PASSES against the fix, so
-// it goes red if the workflow is ever un-pinned again.
-//
-// NOTE: this repo currently has no CI workflow that runs `go test`, so the guard
-// only fires when someone runs the suite locally. Add a push/pull_request test
-// workflow to enforce it automatically.
-//
-// No network, no credentials, no running service required — unlike the
-// integration test in this package.
+// Note: nothing runs `go test` in CI yet, so this only fires locally until a
+// push/pull_request test workflow is added.
 
 import (
 	"fmt"
